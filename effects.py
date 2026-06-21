@@ -116,10 +116,9 @@ class EffectsManager:
         self.show_floating_text(random.choice(texts), color, screen_w//2, screen_h//2-40, 30)
 
     def update(self):
-        for p in self.particles[:]:
+        for p in self.particles:
             p.update()
-            if not p.alive:
-                self.particles.remove(p)
+        self.particles = [p for p in self.particles if p.alive]
         if self.shake_duration > 0:
             self.shake_duration -= 1
             self.shake_offset = (random.randint(-self.shake_intensity, self.shake_intensity),
@@ -131,18 +130,16 @@ class EffectsManager:
             self.flash_alpha = int(255 * self._flash_remain / self.flash_duration) if hasattr(self, 'flash_duration') else 0
         else:
             self.flash_alpha = 0
-        for i, (text, remain, x) in enumerate(self.action_feedback[:]):
-            remain -= 1
-            if remain <= 0:
-                self.action_feedback.pop(i)
-            else:
-                self.action_feedback[i] = (text, remain, x)
-        for i, (text, remain, color, fx, fy) in enumerate(self.floating_texts[:]):
-            remain -= 1
-            if remain <= 0:
-                self.floating_texts.pop(i)
-            else:
-                self.floating_texts[i] = (text, remain, color, fx, fy)
+        self.action_feedback = [
+            (text, remain - 1, x)
+            for text, remain, x in self.action_feedback
+            if remain > 1
+        ]
+        self.floating_texts = [
+            (text, remain - 1, color, fx, fy)
+            for text, remain, color, fx, fy in self.floating_texts
+            if remain > 1
+        ]
 
     def draw(self, surface: pygame.Surface):
         for p in self.particles:

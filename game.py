@@ -240,6 +240,8 @@ class DodgeGame:
                     return "menu"
                 if event.key == pygame.K_F11:
                     return "f11_toggle"
+                if event.key == pygame.K_g:
+                    return "toggle_mode"
                 if event.key == pygame.K_r:
                     self.reset()
         return ""
