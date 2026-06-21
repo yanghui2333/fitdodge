@@ -1,4 +1,4 @@
-﻿"""FitDodge - Body-motion controlled dodge game.
+"""FitDodge - Body-motion controlled dodge game.
 
 Modes:
   - Pose Preview: camera + skeleton overlay (no game)
@@ -17,11 +17,14 @@ from effects import EffectsManager
 from game import DodgeGame
 from pose_guide import PoseGuide
 from gesture_controller import GestureController
+from settings_ui import run_settings, get_tracks
+import os
 
 MENU = "menu"
 POSE_ONLY = "pose_only"
 GAME = "game"
 POSE_GUIDE = "pose_guide"
+SETTINGS = "settings"
 
 WINDOW_W, WINDOW_H = 800, 600
 FULLSCREEN = True
@@ -41,7 +44,7 @@ def draw_menu(screen, fonts, button_hover):
         {"text": "Pose Preview", "desc": "Camera + skeleton only", "mode": POSE_ONLY},
         {"text": "Dodge Game", "desc": "Body + hand gestures to dodge!", "mode": GAME},
         {"text": "Pose Challenge", "desc": "Match target poses with your body", "mode": POSE_GUIDE},
-    ]
+        ]
     bw, bh, base_y, spacing = _sw(360), _sh(80), _sh(230), _sh(95)
     for i, btn in enumerate(buttons):
         bx, by = WINDOW_W // 2 - bw // 2, base_y + i * spacing
@@ -56,6 +59,13 @@ def draw_menu(screen, fonts, button_hover):
         desc = fonts["small"].render(btn["desc"], True, (150, 150, 170))
         screen.blit(label, (bx + (bw - label.get_width()) // 2, by + _sh(14)))
         screen.blit(desc, (bx + (bw - desc.get_width()) // 2, by + _sh(46)))
+    # Settings gear (top-right)
+    gear_r = _sh(18); gear_cx = WINDOW_W - _sw(40); gear_cy = _sh(30)
+    pygame.draw.circle(screen, (60,60,80), (gear_cx, gear_cy), gear_r+2)
+    pygame.draw.circle(screen, (40,40,55), (gear_cx, gear_cy), gear_r)
+    gt = fonts["tiny"].render("SETTINGS", True, (180,180,200))
+    screen.blit(gt, (gear_cx - gt.get_width()//2, gear_cy + gear_r + 4))
+
     footer = fonts["tiny"].render("ESC to quit  |  Move mouse to select  |  Click to enter", True, (100, 100, 120))
     screen.blit(footer, (WINDOW_W // 2 - footer.get_width() // 2, WINDOW_H - _sh(40)))
 
@@ -100,6 +110,10 @@ def run_menu(screen, cap, pose, fonts):
                     if bx <= mx <= bx + bw and by <= my <= by + bh: button_hover = i
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = event.pos
+                # Check settings gear
+                gr = _sh(18); gcx = WINDOW_W - _sw(40); gcy = _sh(30)
+                if (mx-gcx)**2 + (my-gcy)**2 < (gr+8)**2:
+                    return "settings"
                 for i, mode in enumerate([POSE_ONLY, GAME, POSE_GUIDE]):
                     bx, by = WINDOW_W // 2 - bw // 2, base_y + i * spacing
                     if bx <= mx <= bx + bw and by <= my <= by + bh: return mode
@@ -144,6 +158,47 @@ def run_pose_only(screen, cap, pose, classifier, fonts):
         screen.blit(ht, (WINDOW_W - ht.get_width() - _sw(20), _sh(16)))
         pygame.display.flip(); clock.tick(30)
 
+
+
+def run_track_select(screen, fonts, tracks):
+    W, H = screen.get_width(), screen.get_height()
+    fl = pygame.font.Font(None, max(28, H // 24))
+    fm = pygame.font.Font(None, max(22, H // 30))
+    fs = pygame.font.Font(None, max(16, H // 40))
+    clock = pygame.time.Clock()
+    while True:
+        mx, my = pygame.mouse.get_pos()
+        click = False
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                return None
+            if e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+                return None
+            if e.type == pygame.MOUSEBUTTONDOWN:
+                click = True
+        screen.fill((15, 15, 25))
+        t = fl.render("Select a Track", True, (80, 220, 255))
+        screen.blit(t, (W // 2 - t.get_width() // 2, int(H * 0.06)))
+        ih = int(H * 0.08)
+        sy = int(H * 0.18)
+        for i, (name, path, data) in enumerate(tracks):
+            iy = sy + i * (ih + int(H * 0.02))
+            ir = pygame.Rect(int(W * 0.2), iy, int(W * 0.6), ih)
+            hc = (50, 50, 70) if ir.collidepoint(mx, my) else (30, 30, 42)
+            pygame.draw.rect(screen, hc, ir, border_radius=10)
+            bc = (80, 220, 255) if ir.collidepoint(mx, my) else (50, 50, 65)
+            pygame.draw.rect(screen, bc, ir, width=2, border_radius=10)
+            n = fm.render(name, True, (255, 255, 255))
+            screen.blit(n, (ir.x + 20, ir.centery - n.get_height() // 2))
+            kp = data.get("key_poses", len(data.get("poses", [])))
+            inf = fs.render(f"{kp} poses", True, (150, 150, 170))
+            screen.blit(inf, (ir.right - inf.get_width() - 20, ir.centery - inf.get_height() // 2))
+            if click and ir.collidepoint(mx, my):
+                return path
+        ht = fonts["tiny"].render("ESC: back to menu  |  Click a track to start", True, (100, 100, 120))
+        screen.blit(ht, (W // 2 - ht.get_width() // 2, H - int(H * 0.08)))
+        pygame.display.flip()
+        clock.tick(30)
 
 def show_tutorial(screen, fonts, first_time):
     tf = pygame.font.Font(None, _sh(56)); hf = pygame.font.Font(None, _sh(28))
@@ -190,31 +245,130 @@ def show_tutorial(screen, fonts, first_time):
         pygame.display.flip(); clock.tick(30)
 
 
-def run_pose_guide(screen, cap, pose, fonts):
-    guide = PoseGuide(); clock = pygame.time.Clock()
-    while cap.isOpened():
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT: return "quit"
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE: return "quit"
-                if event.key == pygame.K_BACKSPACE: return "menu"
-                if event.key == pygame.K_F11: toggle_fullscreen(screen, fonts); return "f11_toggle"
-                if event.key == pygame.K_r: guide.reset()
-        ret, frame = cap.read()
-        if not ret: continue
-        frame = cv2.flip(frame, 1)
-        processed, result = pose.process_frame(frame)
-        if result and result.pose_landmarks: pose.draw_landmarks(processed, result)
-        guide.update(result, processed.shape[1], processed.shape[0])
-        rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
-        cs = pygame.surfarray.make_surface(np.flip(np.rot90(cv2.resize(rgb, (WINDOW_W, WINDOW_H))), axis=0))
-        guide.draw_targets(cs, WINDOW_W, WINDOW_H)
-        screen.blit(cs, (0, 0)); guide.draw_hud(screen, fonts)
-        ht = fonts["tiny"].render("G: toggle body/gesture  |  ESC: quit  |  Backspace: menu  |  F11: fullscreen  |  R: restart", True, (120, 120, 140))
-        screen.blit(ht, (int(WINDOW_W * 0.012), WINDOW_H - int(WINDOW_H * 0.037)))
-        pygame.display.flip(); clock.tick(30)
-    return "menu"
 
+def run_pose_guide(screen, cap, pose, fonts, track_path):
+    """Pose Challenge mode: match target poses from track with video sync.
+    Shows original video (top-left), camera background, target ghost,
+    real-time skeleton, smiley face, and live scoring.
+    """
+    import json
+    from pose_guide import PoseGuide
+
+    # Load track to get source video path
+    with open(track_path, "r", encoding="utf-8") as f:
+        track_data = json.load(f)
+    video_path = track_data.get("source", "")
+    if not video_path or not os.path.exists(video_path):
+        alt_path = os.path.join(os.path.dirname(track_path), os.path.basename(video_path))
+        if os.path.exists(alt_path):
+            video_path = alt_path
+        else:
+            video_path = None
+
+    # Open video if available
+    vid_cap = None
+    if video_path:
+        vid_cap = cv2.VideoCapture(video_path)
+        if not vid_cap.isOpened():
+            vid_cap = None
+
+    # Create PoseGuide with track
+    guide = PoseGuide(track_path)
+    clock = pygame.time.Clock()
+    guide.start()
+
+    while cap.isOpened():
+        clock.tick(30)  # limit to ~30fps
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                if vid_cap: vid_cap.release()
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if vid_cap: vid_cap.release()
+                    return "quit"
+                if event.key == pygame.K_BACKSPACE:
+                    if vid_cap: vid_cap.release()
+                    return "menu"
+                if event.key == pygame.K_F11:
+                    toggle_fullscreen(screen, fonts)
+                    if vid_cap: vid_cap.release()
+                    return "f11_toggle"
+                if event.key == pygame.K_r:
+                    guide.reset()
+                    guide.start()
+                    if vid_cap:
+                        vid_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+        # Read camera frame
+        ret, cam_frame = cap.read()
+        if not ret:
+            continue
+        cam_frame = cv2.flip(cam_frame, 1)
+
+        # Read video frame and get current playback position
+        vid_frame = None
+        video_pos_ms = 0.0
+        if vid_cap and vid_cap.isOpened():
+            vret, vid_frame = vid_cap.read()
+            if vret:
+                video_pos_ms = vid_cap.get(cv2.CAP_PROP_POS_MSEC)
+            else:
+                # Video ended, stay at final position
+                video_pos_ms = guide.total_duration_ms
+
+        # Process camera frame for pose detection
+        processed, result = pose.process_frame(cam_frame)
+        if result and result.pose_landmarks:
+            pose.draw_landmarks(processed, result)
+
+        # Update guide: sync pose advancement to video playback position
+        guide.update(result, video_pos_ms, processed.shape[1], processed.shape[0])
+
+        # Build background: camera feed with skeleton
+        rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
+        bg_surf = pygame.surfarray.make_surface(
+            np.flip(np.rot90(cv2.resize(rgb, (WINDOW_W, WINDOW_H))), axis=0))
+
+        # Draw target ghost skeleton on background (torso-aligned)
+        guide.draw_ghost(bg_surf, WINDOW_W, WINDOW_H)
+
+        # Draw smiley face on user's head
+        guide.draw_smiley(bg_surf, result, WINDOW_W, WINDOW_H)
+
+        screen.blit(bg_surf, (0, 0))
+
+        # Draw HUD (score, progress, time)
+        guide.draw_hud(screen, fonts)
+
+        # Draw original video PiP (top-left corner)
+        if vid_frame is not None:
+            pip_w = int(WINDOW_W * 0.22)
+            pip_h = int(pip_w * vid_frame.shape[0] / max(1, vid_frame.shape[1]))
+            if pip_h > int(WINDOW_H * 0.22):
+                pip_h = int(WINDOW_H * 0.22)
+                pip_w = int(pip_h * vid_frame.shape[1] / max(1, vid_frame.shape[0]))
+            pip_rgb = cv2.cvtColor(vid_frame, cv2.COLOR_BGR2RGB)
+            pip_resized = cv2.resize(pip_rgb, (pip_w, pip_h))
+            pip_surf = pygame.surfarray.make_surface(
+                np.flip(np.rot90(pip_resized), axis=0))
+            pygame.draw.rect(screen, (80, 220, 255), (6, 6, pip_w + 8, pip_h + 8), 3)
+            screen.blit(pip_surf, (10, 10))
+            label = fonts["tiny"].render("Original", True, (80, 220, 255))
+            screen.blit(label, (10, 10 + pip_h + 4))
+
+        # Helper text (bottom)
+        hint = fonts["tiny"].render(
+            "ESC: quit  |  Backspace: menu  |  F11: fullscreen  |  R: restart",
+            True, (120, 120, 140))
+        screen.blit(hint, (int(WINDOW_W * 0.012), WINDOW_H - int(WINDOW_H * 0.037)))
+
+        pygame.display.flip()
+
+    if vid_cap:
+        vid_cap.release()
+    return "menu"
 
 def run_game(screen, cap, pose, classifier, gesture_ctrl, effects, game, fonts):
     fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)); fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -337,6 +491,7 @@ def main():
             dodge_game = DodgeGame(WINDOW_W, WINDOW_H)
             result = run_menu(screen, cap, pose, fonts)
             if result == "f11_toggle": screen = pygame.display.get_surface(); continue
+            if result == "settings": state = SETTINGS; continue
             if result == "quit": running = False
             else: state = result
 
@@ -346,11 +501,42 @@ def main():
             if result == "quit": running = False
             else: state = result
 
+        elif state == SETTINGS:
+            result = run_settings(screen, cap, pose, fonts)
+            screen = pygame.display.get_surface()
+            state = MENU
+
         elif state == POSE_GUIDE:
-            result = run_pose_guide(screen, cap, pose, fonts)
-            if result == "f11_toggle": screen = pygame.display.get_surface(); continue
-            if result == "quit": running = False
-            else: state = result
+            tracks = get_tracks()
+            if not tracks:
+                screen.fill((15, 15, 25))
+                msg = fonts["small"].render("No pose tracks found!", True, (255, 120, 80))
+                h2 = fonts["tiny"].render("Go to Settings (gear icon) to import a video and create tracks.", True, (150, 150, 170))
+                h3 = fonts["tiny"].render("Press any key to return to menu.", True, (120, 120, 140))
+                screen.blit(msg, (screen.get_width() // 2 - msg.get_width() // 2, screen.get_height() // 2 - 30))
+                screen.blit(h2, (screen.get_width() // 2 - h2.get_width() // 2, screen.get_height() // 2 + 10))
+                screen.blit(h3, (screen.get_width() // 2 - h3.get_width() // 2, screen.get_height() // 2 + 40))
+                pygame.display.flip()
+                waiting = True
+                while waiting:
+                    for e in pygame.event.get():
+                        if e.type in (pygame.QUIT, pygame.KEYDOWN):
+                            waiting = False
+                    pygame.time.wait(50)
+                state = MENU
+            else:
+                selected = run_track_select(screen, fonts, tracks)
+                if selected:
+                    result = run_pose_guide(screen, cap, pose, fonts, selected)
+                    if result == "f11_toggle":
+                        screen = pygame.display.get_surface()
+                        continue
+                    if result == "quit":
+                        running = False
+                    else:
+                        state = result
+                else:
+                    state = MENU
 
         elif state == GAME:
             if dodge_game is None: dodge_game = DodgeGame(WINDOW_W, WINDOW_H)
