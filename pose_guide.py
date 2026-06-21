@@ -168,7 +168,7 @@ class PoseGuide:
         for name, (tx, ty, tol) in targets.items():
             cx = int(tx * frame_w)
             cy = int(ty * frame_h)
-            radius = int(tol * min(frame_w, frame_h))
+            radius = int(tol * min(frame_w, frame_h) * 1.2)
 
             status = self.matched_targets.get(name, "miss")
             base_color = self.TOLERANCE_COLORS[status]
@@ -206,7 +206,7 @@ class PoseGuide:
             progress = min(elapsed / required, 1.0)
 
             bar_x, bar_y = 20, 44
-            bar_w, bar_h = 300, 10
+            bar_w, bar_h = surface.get_width() // 3, max(4, surface.get_height() // 60)
             pygame.draw.rect(surface, (40, 40, 40), (bar_x, bar_y, bar_w, bar_h), border_radius=5)
             fill_w = int(bar_w * progress)
             if fill_w > 0:
@@ -224,7 +224,7 @@ class PoseGuide:
             self.feedback_timer -= 1
             if self.feedback_text:
                 alpha = min(255, self.feedback_timer * 4)
-                fb_font = pygame.font.Font(None, 56)
+                fb_font = pygame.font.Font(None, max(28, surface.get_height() // 12))
                 fb_surf = fb_font.render(self.feedback_text, True, (255, 255, 100))
                 fb_surf.set_alpha(alpha)
                 surface.blit(fb_surf, (surface.get_width() // 2 - fb_surf.get_width() // 2,
@@ -235,7 +235,7 @@ class PoseGuide:
             overlay = pygame.Surface((surface.get_width(), surface.get_height()), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 160))
             surface.blit(overlay, (0, 0))
-            done_font = pygame.font.Font(None, 64)
+            done_font = pygame.font.Font(None, max(32, surface.get_height() // 10))
             done_text = done_font.render("All Poses Complete!", True, (80, 255, 120))
             surface.blit(done_text, (surface.get_width() // 2 - done_text.get_width() // 2,
                                      surface.get_height() // 2 - 40))

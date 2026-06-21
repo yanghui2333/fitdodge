@@ -151,7 +151,7 @@ class EffectsManager:
             flash = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
             flash.fill((*self.flash_color, self.flash_alpha))
             surface.blit(flash, (0, 0))
-        font48 = pygame.font.Font(None, 48)
+        h = surface.get_height(); font48 = pygame.font.Font(None, max(24, h // 14))
         for text, remain, x in self.action_feedback:
             alpha = min(255, int(255 * remain / 30))
             surf = font48.render(text, True, (255, 255, 100, alpha))
@@ -159,7 +159,7 @@ class EffectsManager:
             y = 80 - (30 - remain) * 2
             surface.blit(surf, (x - surf.get_width() // 2, y))
         # Floating texts (larger, centered)
-        font64 = pygame.font.Font(None, 64)
+        font64 = pygame.font.Font(None, max(32, h // 10))
         for text, remain, color, fx, fy in self.floating_texts:
             alpha = min(255, int(255 * remain / self._best_duration(remain)))
             r, g, b = color
