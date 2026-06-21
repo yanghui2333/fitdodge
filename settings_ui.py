@@ -129,7 +129,7 @@ def run_settings(screen, cap, pose_detector, fonts):
     mid_w, mid_h = W//2, H//2
     input_path = ""; input_active = False
     status_text = ""; parsing = False
-    preview_idx = 0; parsed_data = None
+    preview_idx = 0; parsed_data = None; scroll_timer = 0
     tracks = get_tracks(); selected_track = None
     delete_confirm = None  # (track_path, timer)
     font_lg = pygame.font.Font(None, max(28, H//24))
@@ -178,6 +178,7 @@ def run_settings(screen, cap, pose_detector, fonts):
     while True:
         mx, my = pygame.mouse.get_pos()
         click = False
+        keys = pygame.key.get_pressed()
         for event in pygame.event.get():
             if event.type == pygame.QUIT: return
             if event.type == pygame.KEYDOWN:
@@ -351,7 +352,7 @@ def run_settings(screen, cap, pose_detector, fonts):
             MSX, MSW = lx, int(W*0.92)
             pygame.draw.rect(screen, (25,25,38), (MSX, PY, MSW, PH), border_radius=10)
             pygame.draw.rect(screen, (50,50,65), (MSX, PY, MSW, PH), width=2, border_radius=10)
-            screen.blit(font_xs.render("Preview: "+str(preview_idx+1)+"/"+str(total), True, (80,220,255)), (MSX+6, PY+2))
+            # (counter removed, shown on large skeleton instead)
             n_slots = min(11, total); half = n_slots // 2
             sp = max(0, preview_idx - half); ep = min(total-1, sp + n_slots - 1); sp = max(0, ep - n_slots + 1)
             for si in range(ep - sp + 1):
@@ -378,6 +379,14 @@ def run_settings(screen, cap, pose_detector, fonts):
                 screen.blit(font_xs.render(">", True, (255,255,255)), (bn.centerx-4, bn.centery-6))
             if click and bp.collidepoint(mx,my) and preview_idx > 0: preview_idx -= 1
             if click and bn.collidepoint(mx,my) and preview_idx < total-1: preview_idx += 1
+            # Continuous scroll while holding keys
+            if scroll_timer > 0: scroll_timer -= 1
+            if scroll_timer <= 0 and parsed_data and "poses" in parsed_data:
+                tp = len(parsed_data["poses"])
+                if keys[pygame.K_LEFT] and preview_idx > 0:
+                    preview_idx -= 1; scroll_timer = 4
+                elif keys[pygame.K_RIGHT] and preview_idx < tp - 1:
+                    preview_idx += 1; scroll_timer = 4
             hint = font_xs.render("<- -> or click", True, (120,120,140))
             screen.blit(hint, (lx+int(W*0.65), nby+2))
         pygame.display.flip(); clock.tick(30)

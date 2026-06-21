@@ -368,19 +368,34 @@ class PoseGuide:
             ua_norm = (pos[anchor][0]/frame_w, pos[anchor][1]/frame_h)
             pos[limb] = (int((ua_norm[0]+tdx*ulen)*frame_w), int((ua_norm[1]+tdy*ulen)*frame_h))
 
+        # Determine match color based on current_match_pct
+        pct = self.current_match_pct
+        if pct >= 0.8:
+            match_col = (80, 255, 120)   # green
+            ghost_line_col = (80, 255, 120)
+        elif pct >= 0.6:
+            match_col = (255, 220, 80)   # yellow
+            ghost_line_col = (255, 220, 80)
+        else:
+            match_col = None             # use per-joint colors below
+            ghost_line_col = self.GHOST_COLOR
+
         # Draw skeleton
         for ai, bi in CONNECTIONS:
             na, nb = _lm_idx_to_name(ai), _lm_idx_to_name(bi)
             if na in pos and nb in pos:
-                pygame.draw.line(surface, (*self.GHOST_COLOR, 140), pos[na], pos[nb], 3)
+                pygame.draw.line(surface, (*ghost_line_col, 180), pos[na], pos[nb], 3)
 
         # Draw circles
         for name in SCORE_JOINTS:
             if name in pos:
                 r = int(0.018*md)
-                col = (80,255,120) if name in TORSO else self.TARGET_COLOR
-                pygame.draw.circle(surface, (*col, 160), pos[name], r, 3)
-                pygame.draw.circle(surface, (*col, 220), pos[name], max(3, r//3))
+                if match_col is not None:
+                    col = match_col
+                else:
+                    col = (80,255,120) if name in TORSO else self.TARGET_COLOR
+                pygame.draw.circle(surface, (*col, 200), pos[name], r, 3)
+                pygame.draw.circle(surface, (*col, 255), pos[name], max(3, r//3))
 
     def draw_smiley(self, surface: pygame.Surface, result, frame_w: int, frame_h: int):
         """Draw a smiley face at the user's nose position."""
